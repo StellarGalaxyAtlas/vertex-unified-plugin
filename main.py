@@ -111,9 +111,9 @@ def vertex_status(state: dict | None) -> str:
     return f"Connected. Sonar is {sonar}."
 
 
-def media_status(state: dict | None) -> str:
+def media_status(state: dict | None, problem: str = "") -> str:
     if state is None:
-        return "Can't reach the media players on the session bus."
+        return "Can't reach the media players." + (f"\n{problem}" if problem else "")
     players = (state or {}).get("players") or []
     if not players:
         return "No media player is running."
@@ -241,7 +241,7 @@ class VertexPlugin(PluginBase):
             title="Media",
             description="The Media keys play, pause and skip in whatever plays on the "
                         "desktop. Each key can stick to one player in its settings.")
-        group.add(self._status_row("media", media_status(self.media.state)))
+        group.add(self._status_row("media", media_status(self.media.state, self.media.problem)))
         return group
 
     def _discord_group(self) -> Adw.PreferencesGroup:
@@ -308,7 +308,7 @@ class VertexPlugin(PluginBase):
 
     def _on_media(self, event: str, state) -> None:
         if event == "state":
-            self._show_status("media", media_status(state))
+            self._show_status("media", media_status(state, self.media.problem))
 
     def _on_discord(self, event: str, state) -> None:
         if event != "state":

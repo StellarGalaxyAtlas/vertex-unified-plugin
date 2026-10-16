@@ -472,6 +472,24 @@ def test_relay_when_the_sandbox_cannot_see_the_socket(plugin, discord, tmp_path,
         client.stop()
 
 
+def test_a_dead_socket_in_sight_falls_back_to_the_relay(plugin, discord, tmp_path,
+                                                        monkeypatch):
+    # A socket the sandbox sees but can't connect to (left over, or another
+    # sandbox's): the relay finds the live one on the host.
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    dead = tmp_path / "dead" / "discord-ipc-0"
+    dead.parent.mkdir()
+    dead.write_text("")
+    monkeypatch.setattr(plugin.discord_client, "RETRY", 0.1)
+    client = plugin.discord_client.Discord("123", access_token="good-token",
+                                           socket_path=str(dead), relay=["env"])
+    client.start()
+    try:
+        assert _wait(lambda: plugin.discord_client.ready(client.state))
+    finally:
+        client.stop()
+
+
 def test_a_failed_token_swap_says_why(plugin, discord, monkeypatch):
     import io
     import urllib.error
