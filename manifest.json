@@ -1,0 +1,17 @@
+{
+    "version": "0.3.0",
+    "thumbnail": "",
+    "id": "com_stellargalaxyatlas_Vertex",
+    "name": "Vertex Media",
+    "descriptions": {
+        "en_US": "Control Vertex's Sonar volumes and devices and save clips, mute, deafen and join voice channels in Discord, and play, pause and skip media, all in one Vertex theme."
+    },
+    "short-descriptions": {
+        "en_US": "Control Vertex, Discord and media playback"
+    },
+    "tags": ["Audio", "Communication", "Media", "Utility"],
+    "minimum-app-version": "1.5.0-beta",
+    "app-version": "1.5.0-beta.16",
+    "description": "Control Vertex's Sonar volumes and devices and save clips, mute, deafen and join voice channels in Discord, and play, pause and skip media, all in one Vertex theme.",
+    "short-description": "Control Vertex, Discord and media playback"
+}

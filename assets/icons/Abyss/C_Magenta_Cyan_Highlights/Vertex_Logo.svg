@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <rect width="144" height="144" fill="#02050c"/>
+  <g transform="translate(24.0 24.0) scale(4.0)" fill="none" stroke="#ff4fd8" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M12.00 5.50 L6.20 15.40 M6.20 15.40 L17.80 15.40 M17.80 15.40 L12.00 5.50" stroke-width="1.6" stroke-linejoin="miter"/>
+    <path d="M12.00 5.50 L7.10 2.70 M12.00 5.50 L16.90 2.70 M6.20 15.40 L1.40 12.80 M6.20 15.40 L6.20 21.00 M17.80 15.40 L22.60 12.80 M17.80 15.40 L17.80 21.00" stroke-width="1.8" stroke-linecap="butt"/>
+    <path d="M6.17 1.15 L8.03 1.15 L8.65 1.77 L8.65 3.63 L8.03 4.25 L6.17 4.25 L5.55 3.63 L5.55 1.77 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M15.97 1.15 L17.83 1.15 L18.45 1.77 L18.45 3.63 L17.83 4.25 L15.97 4.25 L15.35 3.63 L15.35 1.77 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M0.47 11.25 L2.33 11.25 L2.95 11.87 L2.95 13.73 L2.33 14.35 L0.47 14.35 L-0.15 13.73 L-0.15 11.87 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M5.27 19.45 L7.13 19.45 L7.75 20.07 L7.75 21.93 L7.13 22.55 L5.27 22.55 L4.65 21.93 L4.65 20.07 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M21.67 11.25 L23.53 11.25 L24.15 11.87 L24.15 13.73 L23.53 14.35 L21.67 14.35 L21.05 13.73 L21.05 11.87 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M16.87 19.45 L18.73 19.45 L19.35 20.07 L19.35 21.93 L18.73 22.55 L16.87 22.55 L16.25 21.93 L16.25 20.07 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M10.56 3.10 L13.44 3.10 L14.40 4.06 L14.40 6.94 L13.44 7.90 L10.56 7.90 L9.60 6.94 L9.60 4.06 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M4.76 13.00 L7.64 13.00 L8.60 13.96 L8.60 16.84 L7.64 17.80 L4.76 17.80 L3.80 16.84 L3.80 13.96 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M16.36 13.00 L19.24 13.00 L20.20 13.96 L20.20 16.84 L19.24 17.80 L16.36 17.80 L15.40 16.84 L15.40 13.96 Z" fill="#ff4fd8" stroke="none"/>
+    <path d="M10.92 10.30 L13.08 10.30 L13.80 11.02 L13.80 13.18 L13.08 13.90 L10.92 13.90 L10.20 13.18 L10.20 11.02 Z" fill="#1fe5ff" stroke="none"/>
+  </g>
+</svg>
