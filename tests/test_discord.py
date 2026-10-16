@@ -44,6 +44,7 @@ class FakeDiscord:
         self.refuse = set()            # commands answered with an error
         self.refuse_scopes = set()     # scopes AUTHORIZE won't take
         self.decline = False           # the user says no to the popup
+        self.refuse_redirect = False   # AUTHORIZE takes no redirect_uri
         self.conns = []
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(path)
@@ -83,6 +84,9 @@ class FakeDiscord:
         if cmd in self.refuse:
             raise ValueError("Refused")
         if cmd == "AUTHORIZE":
+            if self.refuse_redirect and "redirect_uri" in args:
+                raise ValueError("OAuth2 Error: Redirect URI cannot be used in the RPC "
+                                 "OAuth2 Authorization flow")
             bad = set(args["scopes"]) & self.refuse_scopes
             if bad:
                 raise ValueError("OAuth2 Error: invalid_scope: The requested scope is "
@@ -486,6 +490,22 @@ def test_a_dead_socket_in_sight_falls_back_to_the_relay(plugin, discord, tmp_pat
     client.start()
     try:
         assert _wait(lambda: plugin.discord_client.ready(client.state))
+    finally:
+        client.stop()
+
+
+def test_authorizes_without_the_redirect_when_discord_refuses_it(plugin, discord,
+                                                                 monkeypatch):
+    discord.refuse_redirect = True
+    client = _client(plugin, discord, monkeypatch)
+    forms = _token_server(monkeypatch, plugin, client)
+    client.start()
+    try:
+        assert _wait(lambda: plugin.discord_client.ready(client.state))
+        authorized = [args for cmd, args, _ in discord.received if cmd == "AUTHORIZE"]
+        assert "redirect_uri" in authorized[0] and "redirect_uri" not in authorized[-1]
+        assert forms[0]["code"] == "the-code" and "redirect_uri" not in forms[0]
+        assert client.saved == [("good-token", "new-refresh")]
     finally:
         client.stop()
 
