@@ -153,7 +153,7 @@ class VertexPlugin(PluginBase):
                                                 action_id_suffix=suffix, action_name=name,
                                                 action_support=support))
 
-        self.register(plugin_name="Vertex Media",
+        self.register(plugin_name="vertex-unified-plugin",
                       github_repo="https://github.com/StellarGalaxyAtlas/vertex-private",
                       plugin_version=VERSION, app_version="1.5.0-beta.16")
 

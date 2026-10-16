@@ -2,7 +2,7 @@
     "version": "0.3.0",
     "thumbnail": "",
     "id": "com_stellargalaxyatlas_Vertex",
-    "name": "Vertex Media",
+    "name": "vertex-unified-plugin",
     "descriptions": {
         "en_US": "Control Vertex's Sonar volumes and devices and save clips, mute, deafen and join voice channels in Discord, and play, pause and skip media, all in one Vertex theme."
     },

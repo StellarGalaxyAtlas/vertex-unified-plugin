@@ -74,7 +74,7 @@ what to share.
 
 ## Settings
 
-StreamController's plugin page, Vertex Media, Settings, has one section
+StreamController's plugin page, vertex-unified-plugin, Settings, has one section
 per part:
 
 - **Look** picks the **Theme** and its **Version** for every key at once,
@@ -206,7 +206,7 @@ mkdir -p ~/.var/app/com.core447.StreamController/data/plugins
 ln -s ~/vertex-media ~/.var/app/com.core447.StreamController/data/plugins/com_stellargalaxyatlas_Vertex
 ```
 
-Restart StreamController. The keys are under "Vertex Media".
+Restart StreamController. The keys are under "vertex-unified-plugin".
 
 Keys set up with the Vertex Discord plugin don't carry over: put the Discord
 keys on the deck again, and enter your Discord app under **Set up**.

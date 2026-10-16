@@ -15,7 +15,7 @@ def test_every_app_has_its_keys(registered):
     suffixes = [holder.action_id_suffix for holder in registered.holders]
     assert len(suffixes) == len(set(suffixes)) == 18
     assert {"MediaPlayPause", "MediaNext", "MediaPrevious"} <= set(suffixes)
-    assert registered.registered["plugin_name"] == "Vertex Media"
+    assert registered.registered["plugin_name"] == "vertex-unified-plugin"
 
 
 def test_one_theme_redraws_every_apps_keys(plugin, registered):
