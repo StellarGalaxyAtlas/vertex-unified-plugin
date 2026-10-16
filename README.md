@@ -248,10 +248,16 @@ flatpak override --user --filesystem=xdg-run/vertex com.core447.StreamController
 ```
 
 Without this permission the Vertex keys still work, but more slowly.
-Discord and the media players are reached through `flatpak-spawn --host`,
-which needs no setup. To reach Discord directly instead, add
-`xdg-run/discord-ipc-0` the same way (for the Flatpak Discord,
-`xdg-run/app/com.discordapp.Discord`).
+Discord and the media players are reached through `flatpak-spawn --host`.
+If the plugin's settings say Discord's socket wasn't found or the media
+players can't be reached, give StreamController direct access instead:
+
+```fish
+flatpak override --user --filesystem=xdg-run/discord-ipc-0 --talk-name=org.mpris.MediaPlayer2.\* com.core447.StreamController
+```
+
+For the Flatpak Discord, use `xdg-run/app/com.discordapp.Discord` in
+place of `xdg-run/discord-ipc-0`.
 
 To update, run `git -C ~/vertex-media pull` and restart StreamController.
 
