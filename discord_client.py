@@ -234,6 +234,7 @@ class Discord:
             relay = ["flatpak-spawn", "--host"] if in_flatpak() else None
         self.relay = None if relay is None else [*relay, "python3", "-c", RELAY]
         self.token_url = TOKEN_URL
+        self._with_redirect = True    # AUTHORIZE takes the redirect, until Discord says no
         self.state: dict | None = None
         self._listeners: list[weakref.ref] = []
         self._lock = threading.Lock()
@@ -566,8 +567,7 @@ class Discord:
         self._ask = False          # one popup per press of Authorize, not one per retry
         self._update(status=AUTHORIZE)
         code = self._code()
-        if not code or not self._exchange(grant_type="authorization_code", code=code,
-                                          redirect_uri=self.redirect_uri):
+        if not code or not self._swap_code(code):
             self._update(status=DECLINED)
             return None
         reply = self.send("AUTHENTICATE", {"access_token": self.access_token})
@@ -582,10 +582,7 @@ class Discord:
         screen share if Discord takes those scopes, else without."""
         tries = (SCOPES + VIDEO_SCOPES, SCOPES) if self.ask_video else (SCOPES,)
         for number, scopes in enumerate(tries):
-            reply = self.send("AUTHORIZE", {"client_id": self.client_id,
-                                            "scopes": list(scopes),
-                                            "redirect_uri": self.redirect_uri},
-                              timeout=AUTHORIZE_TIMEOUT)
+            reply = self._authorize(scopes)
             if reply["ok"]:
                 if number:              # only without the camera and screen share
                     self.ask_video = False
@@ -603,6 +600,28 @@ class Discord:
             if "scope" not in message.lower():
                 return ""          # the user said no
         return ""
+
+    def _authorize(self, scopes) -> dict:
+        """AUTHORIZE, with the redirect, or without it where Discord refuses
+        one in the RPC flow, as it does for some apps."""
+        args = {"client_id": self.client_id, "scopes": list(scopes)}
+        if self._with_redirect:
+            reply = self.send("AUTHORIZE", {**args, "redirect_uri": self.redirect_uri},
+                              timeout=AUTHORIZE_TIMEOUT)
+            if reply["ok"] or "redirect" not in (reply.get("message") or "").lower():
+                return reply
+            self._with_redirect = False
+        return self.send("AUTHORIZE", args, timeout=AUTHORIZE_TIMEOUT)
+
+    def _swap_code(self, code: str) -> bool:
+        """Swaps the popup's code for tokens, giving the redirect the same way
+        AUTHORIZE was given it (without it, Discord may still want it)."""
+        if self._with_redirect:
+            return self._exchange(grant_type="authorization_code", code=code,
+                                  redirect_uri=self.redirect_uri)
+        return self._exchange(grant_type="authorization_code", code=code) or \
+            self._exchange(grant_type="authorization_code", code=code,
+                           redirect_uri=self.redirect_uri)
 
     def _exchange(self, **form) -> bool:
         """Swaps a code or a refresh token for tokens, with Discord's web API."""
