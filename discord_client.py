@@ -443,6 +443,15 @@ class Discord:
                 self._pipe = _Pipe(path, relay)
             except NotRunning:
                 self._pipe = None
+                if relay is None and path and self.relay is not None:
+                    # A socket in sight that takes no connection (left over, or
+                    # another sandbox's): ask the host instead.
+                    path, relay = "", self.relay
+                    try:
+                        self._pipe = _Pipe(path, relay)
+                    except NotRunning:
+                        pass
+            if self._pipe is None:
                 self._problem("Discord's socket wasn't found." if relay is None else
                               "flatpak-spawn couldn't run the relay to Discord.")
             if self._pipe is not None:

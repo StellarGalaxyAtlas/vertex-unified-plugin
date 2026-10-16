@@ -115,7 +115,41 @@ def test_no_gdbus_means_no_media(plugin, tmp_path, monkeypatch):
     client._set_state({"players": []})
     client.start()
     try:
-        assert wait(lambda: client.state is None)
+        assert wait(lambda: client.state is None and client.problem)
+        assert client.problem.startswith("Couldn't run sh")
+    finally:
+        client.stop()
+
+
+def test_says_why_gdbus_failed(plugin, tmp_path, monkeypatch):
+    broken = tmp_path / "gdbus"
+    broken.write_text("#!/bin/sh\necho 'Cannot autolaunch D-Bus without X11' >&2\nexit 1\n")
+    broken.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    client = plugin.media_client.Media(host=None, poll=0.05)
+    client.start()
+    try:
+        assert wait(lambda: client.problem)
+        assert client.problem == ("gdbus couldn't list the players. "
+                                  "Cannot autolaunch D-Bus without X11")
+        assert "Cannot autolaunch" in plugin.main.media_status(None, client.problem)
+    finally:
+        client.stop()
+
+
+def test_without_the_host_it_looks_in_the_sandbox(plugin, bus):
+    # flatpak-spawn refused (or missing): the players are looked at, and
+    # controlled, from where the plugin runs.
+    client = plugin.media_client.Media(host=["/nonexistent/flatpak-spawn", "--host"],
+                                       poll=0.05)
+    bus.set(SPOTIFY, _props())
+    client.start()
+    try:
+        assert wait(lambda: client.players())
+        assert client.host == [] and client.problem == ""
+        replies = []
+        client.command("Pause", callback=replies.append)
+        assert wait(lambda: replies) and replies[0]["ok"]
     finally:
         client.stop()
 

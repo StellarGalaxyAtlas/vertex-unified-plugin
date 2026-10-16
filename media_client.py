@@ -131,9 +131,14 @@ class Media:
         # that runs a command on the host; None: run here.
         if host is True:
             host = ["flatpak-spawn", "--host"] if in_flatpak() else None
-        self.host = list(host or [])
+        # Where the watcher and commands run: on the host, then, if that fails
+        # (StreamController's Flatpak may not be let to use flatpak-spawn),
+        # in the sandbox, which sees the players if it was let talk to them.
+        self._hosts = [list(host), []] if host else [[]]
+        self.host = self._hosts[0]
         self.poll = poll
         self.state: dict | None = None
+        self.problem = ""             # why the players can't be looked at, if they can't
         self.last_playing = ""        # the app that played last
         self._listeners: list[weakref.ref] = []
         self._lock = threading.Lock()
@@ -254,30 +259,64 @@ class Media:
         if watcher is not None and watcher.poll() is None:
             watcher.terminate()        # flatpak-spawn passes it on to the shell
 
+    def _watch_ended(self, host: list[str], code: int | None, errors: str) -> str:
+        """Why the watcher stopped, from its exit status and what it wrote."""
+        last = errors.strip().splitlines()[-1] if errors.strip() else ""
+        where = " on the host" if host else ""
+        if code == 127 or "No such file" in last or "not found" in last:
+            problem = f"gdbus wasn't found{where}."
+        elif code == 3:
+            problem = f"gdbus couldn't list the players{where}."
+        else:
+            problem = f"Looking at the players{where} stopped ({code})."
+        return f"{problem} {last}".strip() if last and last not in problem else problem
+
+    def _watch(self, host: list[str]) -> str:
+        """Follow the players with a watcher run with `host`, for as long as it
+        runs; returns why it stopped, or "" when the plugin stops."""
+        try:
+            watcher = subprocess.Popen([*host, "sh", "-c", WATCH, "sh", str(self.poll)],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True)
+        except OSError as exc:
+            return f"Couldn't run {(host or ['sh'])[0]}: {exc.strerror}."
+        self._watcher = watcher
+        lines: list[str] = []
+        try:
+            for line in watcher.stdout:
+                line = line.rstrip("\n")
+                if line == "END":
+                    self.host = host           # commands go the same way
+                    self.problem = ""
+                    self._set_state({"players": parse(lines)})
+                    lines = []
+                else:
+                    lines.append(line)
+        except (OSError, ValueError):
+            pass
+        finally:
+            if watcher.poll() is None:
+                watcher.terminate()
+            code = watcher.wait()
+            try:
+                errors = watcher.stderr.read()
+            except (OSError, ValueError):
+                errors = ""
+            self._watcher = None
+        return "" if self._stopping.is_set() else self._watch_ended(host, code, errors)
+
     def _follow(self) -> None:
         while not self._stopping.is_set():
-            try:
-                self._watcher = subprocess.Popen(
-                    [*self.host, "sh", "-c", WATCH, "sh", str(self.poll)],
-                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-            except OSError:
-                self._watcher = None
-            if self._watcher is not None:
-                lines: list[str] = []
-                try:
-                    for line in self._watcher.stdout:
-                        line = line.rstrip("\n")
-                        if line == "END":
-                            self._set_state({"players": parse(lines)})
-                            lines = []
-                        else:
-                            lines.append(line)
-                except (OSError, ValueError):
-                    pass
-                finally:
-                    if self._watcher.poll() is None:
-                        self._watcher.terminate()
-                    self._watcher.wait()
-                    self._watcher = None
-            self._set_state(None)
+            problems = []
+            for host in self._hosts:
+                problem = self._watch(host)
+                if not problem or self._stopping.is_set():
+                    break
+                problems.append(problem)
+            if problems:
+                self.problem = " ".join(problems)
+                if self.state is None:
+                    self._emit("state", None)    # the same state, but maybe another problem
+                else:
+                    self._set_state(None)
             self._stopping.wait(RETRY)
