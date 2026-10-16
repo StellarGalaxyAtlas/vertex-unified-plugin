@@ -475,6 +475,11 @@ class Discord:
         while True:
             header = pipe.read(8)
             if not header:
+                if self.state is None:     # gone before Discord said READY
+                    self._problem("Discord closed the connection without saying why."
+                                  if pipe._proc is None else
+                                  "The relay found no Discord on the host, or Discord "
+                                  "closed the connection.")
                 return
             op, length = struct.unpack("<II", header)
             body = pipe.read(length)
