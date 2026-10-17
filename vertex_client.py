@@ -25,6 +25,7 @@ from collections.abc import Callable
 
 TIMEOUT = 5.0
 RETRY = 3.0          # seconds between attempts to reach a Vertex that isn't running
+FIRST_REPLY = 10.0   # seconds to wait for Vertex's first answer before trying again
 
 # Run on the host by `flatpak-spawn --host python3 -c RELAY`: connects to the
 # socket (the host's own, or the path given), sends the request from stdin and
@@ -129,6 +130,11 @@ class _Connection:
                 self._proc.wait()
 
 
+def _drop(silent: threading.Event, connection: _Connection) -> None:
+    silent.set()
+    connection.close()
+
+
 Listener = Callable[[str, dict | None], None]
 
 
@@ -154,6 +160,7 @@ class Vertex:
             [*relay, "python3", "-c", RELAY, self.socket_path]
         self.prefer_socket = True     # use the socket when the sandbox can see it
         self.state: dict | None = None
+        self.problem = ""             # why Vertex can't be reached, if not just not running
         self._listeners: list[weakref.ref] = []
         self._lock = threading.Lock()
         self._stopping = threading.Event()
@@ -247,22 +254,38 @@ class Vertex:
 
     def _follow(self) -> None:
         while not self._stopping.is_set():
+            silent = threading.Event()
             try:
-                self._following = _Connection(_request("subscribe", {}), self.socket_path,
-                                              self._relay_now(), None)
+                connection = _Connection(_request("subscribe", {}), self.socket_path,
+                                         self._relay_now(), None)
             except NotRunning:
-                self._following = None
-            if self._following is not None:
+                connection = None
+            if connection is not None:
+                self._following = connection
+                # A connection that stays silent is dropped and tried again,
+                # so one that hangs while the desktop starts doesn't keep
+                # the keys off until StreamController restarts.
+                timer = threading.Timer(FIRST_REPLY, _drop, (silent, connection))
+                timer.start()
                 try:
-                    for message in self._following:
+                    for message in connection:
+                        timer.cancel()
+                        self.problem = ""
                         # The first reply has no "event": it is the state too.
                         if message.get("event", "state") == "state":
                             self._set_state(message.get("data"))
                         elif message["event"] == "notice":
                             self._emit("notice", message.get("data"))
                 finally:
-                    self._following.close()
+                    timer.cancel()
+                    connection.close()
                     self._following = None
+            problem = (f"Vertex didn't answer within {FIRST_REPLY:g} seconds; trying again."
+                       if silent.is_set() and not self._stopping.is_set() else "")
+            if problem != self.problem:
+                self.problem = problem
+                if self.state is None:
+                    self._emit("state", None)    # the same state, but another problem
             self._set_state(None)
             self._stopping.wait(RETRY)
 
