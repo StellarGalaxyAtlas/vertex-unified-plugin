@@ -2,6 +2,8 @@
 keys with StreamController stubbed out. Needs Vertex installed in the same
 Python (see development.md); skipped without it."""
 
+import json
+import socket
 import threading
 import types
 from pathlib import Path
@@ -102,6 +104,57 @@ def test_follow_state_changes_and_vertex_stopping(plugin, vertex, relay, monkeyp
         vertex.server.stop()
         assert _wait(lambda: client.state is None)
         assert seen[-1] == ("state", None)
+    finally:
+        client.stop()
+
+
+def test_a_vertex_that_stays_silent_is_tried_again(plugin, tmp_path, monkeypatch):
+    # The first connection is taken but never answered, as by a Vertex (or
+    # a relay) that hangs while the desktop starts; the next one answers.
+    monkeypatch.setattr(plugin.vertex_client, "FIRST_REPLY", 0.3)
+    monkeypatch.setattr(plugin.vertex_client, "RETRY", 0.1)
+    path = str(tmp_path / "control.sock")
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen()
+    conns = []
+
+    def accept():
+        while True:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                return
+            conns.append(conn)
+            if len(conns) > 1:
+                conn.sendall(json.dumps({"ok": True, "data": _state()}).encode() + b"\n")
+    threading.Thread(target=accept, daemon=True).start()
+    client = plugin.vertex_client.Vertex(path, relay=None)
+    problems = []
+    client.add_listener(listener := lambda event, data: problems.append(client.problem))
+    client.start()
+    try:
+        assert _wait(lambda: client.state == _state())
+        assert any("didn't answer within 0.3 seconds" in problem for problem in problems)
+        assert client.problem == ""
+        assert plugin.main.vertex_status(None, "Why.") == "Vertex isn't running.\nWhy."
+    finally:
+        client.stop()
+        server.close()
+        for conn in conns:
+            conn.close()
+    del listener
+
+
+def test_a_relay_that_hangs_is_dropped(plugin, tmp_path, monkeypatch):
+    monkeypatch.setattr(plugin.vertex_client, "FIRST_REPLY", 0.3)
+    monkeypatch.setattr(plugin.vertex_client, "RETRY", 0.1)
+    client = plugin.vertex_client.Vertex(str(tmp_path / "missing" / "control.sock"),
+                                         relay=["sh", "-c", "exec sleep 60", "sh"])
+    client.start()
+    try:
+        assert _wait(lambda: "didn't answer" in client.problem)
+        assert client.state is None
     finally:
         client.stop()
 

@@ -104,9 +104,9 @@ def status_text(state: dict | None, problem: str = "") -> str:
     return f"{text}\n{problem}" if problem and not dc.ready(state) else text
 
 
-def vertex_status(state: dict | None) -> str:
+def vertex_status(state: dict | None, problem: str = "") -> str:
     if state is None:
-        return "Vertex isn't running."
+        return "Vertex isn't running." + (f"\n{problem}" if problem else "")
     sonar = "on" if (state.get("sonar") or {}).get("active") else "off"
     return f"Connected. Sonar is {sonar}."
 
@@ -131,6 +131,7 @@ class VertexPlugin(PluginBase):
         self.has_plugin_settings = True
         self._rows: dict[str, Adw.ActionRow] = {}      # the status rows shown now
         self._logged = ""         # Discord's problem last written to the log
+        self._logged_vertex = ""  # and Vertex's
 
         self.vertex = Vertex()
         self.discord = dc.Discord(
@@ -233,7 +234,7 @@ class VertexPlugin(PluginBase):
     def _vertex_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(title="Vertex",
                                      description="The Sonar, replay and Show Vertex keys.")
-        group.add(self._status_row("vertex", vertex_status(self.vertex.state)))
+        group.add(self._status_row("vertex", vertex_status(self.vertex.state, self.vertex.problem)))
         return group
 
     def _media_group(self) -> Adw.PreferencesGroup:
@@ -303,8 +304,13 @@ class VertexPlugin(PluginBase):
             GLib.idle_add(row.set_subtitle, text)
 
     def _on_vertex(self, event: str, state) -> None:
-        if event == "state":
-            self._show_status("vertex", vertex_status(state))
+        if event != "state":
+            return
+        problem = self.vertex.problem
+        if problem and problem != self._logged_vertex:
+            log.warning(f"Vertex: {problem}")
+        self._logged_vertex = problem
+        self._show_status("vertex", vertex_status(state, problem))
 
     def _on_media(self, event: str, state) -> None:
         if event == "state":

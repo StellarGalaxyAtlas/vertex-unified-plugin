@@ -45,6 +45,7 @@ class FakeDiscord:
         self.refuse_scopes = set()     # scopes AUTHORIZE won't take
         self.decline = False           # the user says no to the popup
         self.refuse_redirect = False   # AUTHORIZE takes no redirect_uri
+        self.silent = 0                # handshakes left unanswered, as by a Discord starting
         self.conns = []
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(path)
@@ -69,6 +70,9 @@ class FakeDiscord:
             payload = json.loads(_read(conn, length))
             if op == 0:
                 self.handshakes.append(payload)
+                if self.silent:
+                    self.silent -= 1
+                    continue
                 _send(conn, 1, {"cmd": "DISPATCH", "evt": "READY", "data": {"v": 1}})
                 continue
             self.received.append((payload["cmd"], payload.get("args"), payload.get("evt")))
@@ -490,6 +494,35 @@ def test_a_dead_socket_in_sight_falls_back_to_the_relay(plugin, discord, tmp_pat
     client.start()
     try:
         assert _wait(lambda: plugin.discord_client.ready(client.state))
+    finally:
+        client.stop()
+
+
+def test_a_discord_that_never_says_ready_is_tried_again(plugin, discord, monkeypatch):
+    monkeypatch.setattr(plugin.discord_client, "READY_TIMEOUT", 0.3)
+    discord.silent = 1
+    client = _client(plugin, discord, monkeypatch, access_token="good-token")
+    problems = []
+    client.add_listener(listener := lambda event, data: problems.append(client.problem))
+    client.start()
+    try:
+        assert _wait(lambda: plugin.discord_client.ready(client.state))
+        assert len(discord.handshakes) == 2
+        assert any("didn't answer within 0.3 seconds" in problem for problem in problems)
+        assert client.problem == ""
+    finally:
+        client.stop()
+    del listener
+
+
+def test_a_relay_that_hangs_is_dropped(plugin, monkeypatch):
+    monkeypatch.setattr(plugin.discord_client, "READY_TIMEOUT", 0.3)
+    monkeypatch.setattr(plugin.discord_client, "find_socket", lambda: "")
+    monkeypatch.setattr(plugin.discord_client, "RETRY", 0.1)
+    client = plugin.discord_client.Discord("123", relay=["sh", "-c", "exec sleep 60", "sh"])
+    client.start()
+    try:
+        assert _wait(lambda: "didn't answer" in client.problem)
     finally:
         client.stop()
 

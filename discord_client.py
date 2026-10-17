@@ -36,6 +36,7 @@ from collections.abc import Callable
 TIMEOUT = 5.0
 AUTHORIZE_TIMEOUT = 120.0     # the user answers Discord's popup
 RETRY = 3.0                   # seconds between attempts to reach a Discord that isn't running
+READY_TIMEOUT = 15.0          # seconds to wait for READY before trying again
 REDIRECT = "http://localhost:9000"
 TOKEN_URL = "https://discord.com/api/oauth2/token"
 USER_AGENT = ("DiscordBot (https://github.com/StellarGalaxyAtlas/"
@@ -471,6 +472,21 @@ class Discord:
             self._wake.wait(RETRY)
 
     def _run(self, pipe: _Pipe) -> None:
+        # A connection that stays silent is dropped and tried again, so one
+        # that hangs while the desktop starts doesn't keep the keys off
+        # until StreamController restarts.
+        silent = threading.Event()
+        timer = threading.Timer(READY_TIMEOUT, lambda: (silent.set(), pipe.close()))
+        timer.start()
+        try:
+            self._read(pipe, timer)
+        finally:
+            timer.cancel()
+        if silent.is_set() and self.state is None and not self._stopping.is_set():
+            self._problem(f"Discord didn't answer within {READY_TIMEOUT:g} seconds; "
+                          "trying again.")
+
+    def _read(self, pipe: _Pipe, timer: threading.Timer) -> None:
         with self._write_lock:
             pipe.write(frame(HANDSHAKE, {"v": 1, "client_id": self.client_id}))
         while True:
@@ -482,6 +498,7 @@ class Discord:
                                   "The relay found no Discord on the host, or Discord "
                                   "closed the connection.")
                 return
+            timer.cancel()
             op, length = struct.unpack("<II", header)
             body = pipe.read(length)
             if length and not body:
