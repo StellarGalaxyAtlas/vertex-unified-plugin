@@ -300,6 +300,31 @@ def channel(state: dict | None, channel_id: str) -> dict | None:
     return (sonar(state).get("channels") or {}).get(channel_id)
 
 
+# Vertex's volume levels follow a curve, so that each step sounds about as big:
+# a level of L% is (L/100)^(2/3) of full volume to the audio server, which is
+# the number the desktop's own volume control shows. The keys show and step
+# that number, and Vertex is sent the level that gives it.
+
+def desktop_volume(level: int) -> int:
+    """A Vertex level, in percent, as the desktop's volume control shows it."""
+    return round(100 * (max(0, min(100, level)) / 100) ** (2 / 3))
+
+
+def level_for(volume: int) -> int:
+    """The Vertex level, in percent, for a volume as the desktop shows it."""
+    return round(100 * (max(0, min(100, volume)) / 100) ** 1.5)
+
+
+def level_after(level: int, direction: str, step: int) -> int:
+    """The Vertex level that moves the desktop's volume by `step` from
+    `level`, up or down; at least one level, so a press always does something."""
+    sign = 1 if direction == "up" else -1
+    target = level_for(desktop_volume(level) + sign * step)
+    if target == level:
+        target += sign
+    return max(0, min(100, target))
+
+
 def device_name(device: dict | None) -> str:
     """What a key shows for a device: its description, as Vertex shows it."""
     if not device:

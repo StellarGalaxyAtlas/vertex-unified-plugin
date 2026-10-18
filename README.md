@@ -16,8 +16,8 @@ reach Discord's local RPC socket from StreamController.
 
 | Key | What it does |
 | --- | --- |
-| Sonar Information | Shows a channel's volume, or "Muted", as a tile drawn like the icons in the theme's colors (or as plain labels) |
-| Sonar Volume | Turns a channel up or down by a step you set. On a dial: turn to change, press to mute |
+| Sonar Information | Shows a channel's volume as the desktop's volume control shows it, or "Muted", as a tile drawn like the icons in the theme's colors (or as plain labels) |
+| Sonar Volume | Turns a channel up or down by a step you set, as the desktop's volume control counts it. On a dial: turn to change, press to mute |
 | Sonar Toggle Channel Mute | Mutes or unmutes a channel |
 | Sonar Next Microphone | Switches to the next mic in the device manager's list |
 | Sonar Next Output Device | Switches to the next output in the device manager's list |

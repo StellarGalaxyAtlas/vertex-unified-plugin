@@ -59,7 +59,7 @@ class _ChannelKey(VertexAction):
             return SONAR_OFF
         if entry is None:
             return ""
-        return "Muted" if entry["muted"] else f"{entry['volume']}%"
+        return "Muted" if entry["muted"] else f"{vc.desktop_volume(entry['volume'])}%"
 
     def get_config_rows(self):
         return [self.choice_row("Channel", "channel", CHANNELS, self.default_channel)]
@@ -91,7 +91,7 @@ class SonarInformation(_ChannelKey):
             return self._title().upper(), "–", "text"
         if entry["muted"]:
             return self._title().upper(), "MUTED", "red"
-        return self._title().upper(), f"{entry['volume']}%", "value"
+        return self._title().upper(), f"{vc.desktop_volume(entry['volume'])}%", "value"
 
     def show(self, state):
         if self.setting("look", "tile") != "tile":
@@ -114,8 +114,9 @@ class SonarInformation(_ChannelKey):
 
 
 class SonarVolume(_ChannelKey):
-    """Turns a Sonar channel up or down by a set step. On a dial, turning
-    sets it by that step either way and pressing mutes."""
+    """Turns a Sonar channel up or down by a set step, as the desktop's
+    volume control counts it. On a dial, turning sets it by that step either
+    way and pressing mutes."""
 
     FACES = (("volume", "Icon"),)
 
@@ -137,7 +138,14 @@ class SonarVolume(_ChannelKey):
                        level if off else "", dim=off)
 
     def _turn(self, action: str) -> None:
-        self.send("volume", channel=self._channel(), action=action, step=self._step())
+        state = self.vertex.state
+        entry = vc.channel(state, self._channel())
+        if entry is None or not vc.sonar(state).get("active"):
+            # Vertex says why it can't, or steps on its own scale.
+            self.send("volume", channel=self._channel(), action=action, step=self._step())
+            return
+        self.send("volume", channel=self._channel(), action="set",
+                  value=vc.level_after(entry["volume"], action, self._step()))
 
     def on_key_down(self):
         self._turn(self._direction())
