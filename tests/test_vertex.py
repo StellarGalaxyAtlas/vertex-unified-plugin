@@ -215,7 +215,7 @@ def test_information_key_draws_a_tile(plugin, vertex):
     spooky = plugin.theme.tile_colors("spooky", "C")
     key.show(_state(volume=55))
     assert key.labels == {"top": "", "center": "", "bottom": ""}
-    assert key._tile == ("GAME", "55%", spooky, "value")
+    assert key._tile == ("GAME", "67%", spooky, "value")      # as the desktop shows it
     assert key.media[-1].size == (144, 144)
     key.show(_state(volume=55))                         # nothing changed: not redrawn
     assert len(key.media) == 1
@@ -235,7 +235,7 @@ def test_information_key_as_labels(plugin, vertex):
     key, _client = _key(plugin, vertex, plugin.vertex_keys.SonarInformation, channel="game",
                         look="labels")
     key.show(_state(volume=55))
-    assert key.labels == {"top": "Game", "center": "", "bottom": "55%"}
+    assert key.labels == {"top": "Game", "center": "", "bottom": "67%"}
     key.show(_state(muted=True))
     assert key.labels["bottom"] == "Muted"
     key.show(_state(active=False))
@@ -254,7 +254,7 @@ def test_volume_key_steps_by_its_setting(plugin, vertex):
     down, _ = _key(plugin, vertex, plugin.vertex_keys.SonarVolume, channel="game",
                    direction="down", step=10)
     down.show(_state(volume=55))
-    assert down.labels == {"top": "Game", "center": "-10%", "bottom": "55%"}
+    assert down.labels == {"top": "Game", "center": "-10%", "bottom": "67%"}
     down.on_key_down()
     assert _wait(lambda: vertex.received == [
         ("volume", {"channel": "game", "action": "down", "step": 10})])
@@ -264,6 +264,30 @@ def test_volume_key_steps_by_its_setting(plugin, vertex):
     up.on_key_down()
     assert _wait(lambda: len(vertex.received) == 2)
     assert vertex.received[1] == ("volume", {"channel": "game", "action": "up", "step": 5})
+
+
+def test_volumes_as_the_desktop_shows_them(plugin):
+    vc = plugin.vertex_client
+    # Vertex's 45% is the desktop's 59%; Vertex's 100% and 0% are its own.
+    assert [vc.desktop_volume(level) for level in (0, 45, 55, 100)] == [0, 59, 67, 100]
+    assert vc.level_for(59) == 45
+    for level in range(0, 96):
+        start = vc.desktop_volume(level)
+        after = vc.desktop_volume(vc.level_after(level, "up", 5))
+        assert 4 <= after - start <= 6 or after == 100
+        assert vc.level_after(level, "up", 5) > level
+    assert vc.level_after(100, "up", 5) == 100 and vc.level_after(0, "down", 5) == 0
+    assert vc.level_after(45, "down", 5) == vc.level_for(54)
+
+
+def test_volume_key_steps_the_desktop_volume(plugin, vertex):
+    key, client = _key(plugin, vertex, plugin.vertex_keys.SonarVolume, channel="game")
+    client._set_state(_state(volume=45))
+    key.on_key_down()
+    # The desktop shows 59%: the key asks Vertex for the level that makes it 64%.
+    assert _wait(lambda: vertex.received[-1:] == [
+        ("volume", {"channel": "game", "action": "set", "value": 51})])
+    assert plugin.vertex_client.desktop_volume(51) == 64
 
 
 def test_volume_key_on_a_dial(plugin, vertex):
