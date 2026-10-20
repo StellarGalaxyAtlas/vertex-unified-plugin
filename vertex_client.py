@@ -8,9 +8,9 @@ per change.
 Standard library only: this runs in StreamController's Python, not Vertex's.
 StreamController's Flatpak can't see the socket (it lives in
 `$XDG_RUNTIME_DIR/vertex`, outside the sandbox) unless it was given that
-folder (`xdg-run/vertex`, in Flatseal or with `flatpak override`). Without
-it, every connection goes through a small relay that `flatpak-spawn --host`
-runs on the host.
+folder (`xdg-run/vertex`, in Flatseal or with `flatpak override`) while
+Vertex was running. Without it, every connection goes through a small relay
+that `flatpak-spawn --host` runs on the host.
 """
 
 from __future__ import annotations
@@ -168,19 +168,29 @@ class Vertex:
         self._thread: threading.Thread | None = None
 
     def _relay_now(self) -> list[str] | None:
-        """The relay, unless the socket's folder is in sight (given to the
-        Flatpak); it is there whenever Vertex has run since login."""
-        if self.relay is None or (self.prefer_socket and
-                                  os.path.isdir(os.path.dirname(self.socket_path))):
+        """The relay, unless the socket itself is in sight. Its folder isn't
+        enough: given to the Flatpak before Vertex made it (StreamController
+        started first), the sandbox gets an empty folder of its own."""
+        if self.relay is None or (self.prefer_socket and os.path.exists(self.socket_path)):
             return None
         return self.relay
+
+    def _connect(self, line: bytes, timeout: float | None) -> _Connection:
+        relay = self._relay_now()
+        try:
+            return _Connection(line, self.socket_path, relay, timeout)
+        except NotRunning:
+            if relay is not None or self.relay is None:
+                raise
+        # A socket in sight that takes no connection (left over from a
+        # Vertex that stopped): ask the host instead.
+        return _Connection(line, self.socket_path, self.relay, timeout)
 
     # --- Requests -------------------------------------------------------------------
 
     def send(self, command: str, timeout: float = TIMEOUT, **args) -> dict:
         """Send one command and return the reply. Raises NotRunning."""
-        connection = _Connection(_request(command, args), self.socket_path,
-                                 self._relay_now(), timeout)
+        connection = self._connect(_request(command, args), timeout)
         timer = threading.Timer(timeout, connection.close)      # the relay has no timeout
         timer.start()
         try:
@@ -256,8 +266,7 @@ class Vertex:
         while not self._stopping.is_set():
             silent = threading.Event()
             try:
-                connection = _Connection(_request("subscribe", {}), self.socket_path,
-                                         self._relay_now(), None)
+                connection = self._connect(_request("subscribe", {}), None)
             except NotRunning:
                 connection = None
             if connection is not None:
