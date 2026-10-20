@@ -161,10 +161,45 @@ def test_a_relay_that_hangs_is_dropped(plugin, tmp_path, monkeypatch):
 
 def test_socket_is_used_once_the_sandbox_can_see_it(plugin, vertex, tmp_path):
     client = plugin.vertex_client.Vertex(vertex.sock, relay=["/nonexistent/flatpak-spawn"])
-    assert client.send("show")["ok"]                   # the folder is there: no relay
+    assert client.send("show")["ok"]                   # the socket is there: no relay
     hidden = plugin.vertex_client.Vertex(str(tmp_path / "hidden" / "control.sock"),
                                   relay=["/nonexistent/flatpak-spawn"])
     assert hidden._relay_now() == hidden.relay
+
+
+def _seen_from_the_sandbox(plugin, vertex, path):
+    """A client in the sandbox seeing `path`, whose relay reaches the real
+    Vertex on the "host"."""
+    client = plugin.vertex_client.Vertex(str(path), relay=[])
+    client.relay = ["python3", "-c", plugin.vertex_client.RELAY, vertex.sock]
+    return client
+
+
+def test_an_empty_folder_in_sight_goes_through_the_relay(plugin, vertex, tmp_path,
+                                                         monkeypatch):
+    # The folder given to the Flatpak before Vertex made it: the sandbox has
+    # an empty one, and Vertex is only reached through the host.
+    monkeypatch.setattr(plugin.vertex_client, "RETRY", 0.1)
+    (tmp_path / "sandbox").mkdir()
+    client = _seen_from_the_sandbox(plugin, vertex, tmp_path / "sandbox" / "control.sock")
+    assert client._relay_now() == client.relay
+    assert client.send("show")["ok"]
+    client.start()
+    try:
+        assert _wait(lambda: client.state == _state())
+    finally:
+        client.stop()
+
+
+def test_a_dead_socket_in_sight_falls_back_to_the_relay(plugin, vertex, tmp_path):
+    (tmp_path / "sandbox").mkdir()
+    dead = tmp_path / "sandbox" / "control.sock"
+    left = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    left.bind(str(dead))
+    left.close()                                     # the file stays, nobody listens
+    client = _seen_from_the_sandbox(plugin, vertex, dead)
+    assert client._relay_now() is None
+    assert client.send("show") == {"ok": True, "message": "did show"}
 
 
 def test_listeners_are_held_weakly(plugin):
