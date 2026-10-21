@@ -480,6 +480,20 @@ def test_relay_when_the_sandbox_cannot_see_the_socket(plugin, discord, tmp_path,
         client.stop()
 
 
+def test_the_relay_runs_from_StreamControllers_folder(plugin, discord, tmp_path,
+                                                     monkeypatch, flatpak_spawn):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(plugin.discord_client, "find_socket", lambda: "")
+    monkeypatch.setattr(plugin.discord_client, "RETRY", 0.1)
+    client = plugin.discord_client.Discord("123", access_token="good-token",
+                                           relay=flatpak_spawn)
+    client.start()
+    try:
+        assert _wait(lambda: plugin.discord_client.ready(client.state))
+    finally:
+        client.stop()
+
+
 # A relay that can't start, as flatpak-spawn says when the host won't run it.
 FAILING_RELAY = ["sh", "-c", "echo 'Portal call failed: no such method' >&2; exit 1", "sh"]
 

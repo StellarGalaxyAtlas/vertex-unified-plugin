@@ -87,6 +87,11 @@ def find_socket() -> str:
                 return path
     return ""
 
+# `flatpak-spawn --host` runs a command in the folder it is started from, so
+# that folder has to exist on the host too. StreamController's Flatpak runs
+# from /app/bin/StreamController, which doesn't: started from there, every
+# command fails at once. Commands are started from / instead.
+HOST_CWD = "/"
 
 # Run on the host by `flatpak-spawn --host python3 -c RELAY`: finds Discord's
 # socket as `find_socket` does, connects, and copies bytes both ways.
@@ -168,7 +173,7 @@ class _Pipe:
                 raise NotRunning() from exc
         else:
             try:
-                self._proc = subprocess.Popen(relay, stdin=subprocess.PIPE,
+                self._proc = subprocess.Popen(relay, cwd=HOST_CWD, stdin=subprocess.PIPE,
                                               stdout=subprocess.PIPE,
                                               stderr=subprocess.PIPE)
             except OSError as exc:

@@ -26,6 +26,11 @@ from collections.abc import Callable
 TIMEOUT = 5.0
 RETRY = 3.0          # seconds between attempts to reach a Vertex that isn't running
 FIRST_REPLY = 10.0   # seconds to wait for Vertex's first answer before trying again
+# `flatpak-spawn --host` runs a command in the folder it is started from, so
+# that folder has to exist on the host too. StreamController's Flatpak runs
+# from /app/bin/StreamController, which doesn't: started from there, every
+# command fails at once. Commands are started from / instead.
+HOST_CWD = "/"
 
 # Run on the host by `flatpak-spawn --host python3 -c RELAY`: connects to the
 # socket (the host's own, or the path given), sends the request from stdin and
@@ -110,7 +115,7 @@ class _Connection:
             self._lines = self._sock.makefile("rb")
         else:
             try:
-                self._proc = subprocess.Popen(relay,
+                self._proc = subprocess.Popen(relay, cwd=HOST_CWD,
                                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                               stderr=subprocess.PIPE)
                 self._proc.stdin.write(line)
