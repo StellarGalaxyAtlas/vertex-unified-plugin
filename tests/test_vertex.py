@@ -159,6 +159,22 @@ def test_a_relay_that_hangs_is_dropped(plugin, tmp_path, monkeypatch):
         client.stop()
 
 
+# A relay that can't start, as flatpak-spawn says when the host won't run it.
+FAILING_RELAY = ["sh", "-c", "echo 'Portal call failed: no such method' >&2; exit 1", "sh"]
+
+def test_says_why_the_relay_failed(plugin, tmp_path, monkeypatch):
+    monkeypatch.setattr(plugin.vertex_client, "RETRY", 0.1)
+    client = plugin.vertex_client.Vertex(str(tmp_path / "missing" / "control.sock"),
+                                         relay=FAILING_RELAY)
+    client.start()
+    try:
+        assert _wait(lambda: client.problem)
+        assert client.problem == ("The relay to the host failed (1): "
+                                  "Portal call failed: no such method")
+    finally:
+        client.stop()
+
+
 def test_socket_is_used_once_the_sandbox_can_see_it(plugin, vertex, tmp_path):
     client = plugin.vertex_client.Vertex(vertex.sock, relay=["/nonexistent/flatpak-spawn"])
     assert client.send("show")["ok"]                   # the socket is there: no relay

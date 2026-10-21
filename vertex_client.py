@@ -47,6 +47,25 @@ for line in client.makefile("rb"):
 NOT_RUNNING_EXIT = 3
 
 
+def relay_failure(proc: subprocess.Popen | None) -> str:
+    """Why a relay that ended without a word failed, or "" when it simply
+    found nothing to connect to (or there was no relay)."""
+    if proc is None:
+        return ""
+    try:
+        code = proc.wait(2)
+    except subprocess.TimeoutExpired:
+        return ""
+    if code in (0, NOT_RUNNING_EXIT):
+        return ""
+    try:
+        errors = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
+    except (OSError, ValueError):
+        errors = ""
+    last = errors.splitlines()[-1] if errors else ""
+    return f"The relay to the host failed ({code}){': ' + last if last else '.'}"
+
+
 class NotRunning(RuntimeError):
     def __init__(self):
         super().__init__("Vertex is not running.")
@@ -93,7 +112,7 @@ class _Connection:
             try:
                 self._proc = subprocess.Popen(relay,
                                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                              stderr=subprocess.DEVNULL)
+                                              stderr=subprocess.PIPE)
                 self._proc.stdin.write(line)
                 self._proc.stdin.close()
             except OSError as exc:
@@ -265,6 +284,7 @@ class Vertex:
     def _follow(self) -> None:
         while not self._stopping.is_set():
             silent = threading.Event()
+            failed = ""                   # why the relay failed, if it did
             try:
                 connection = self._connect(_request("subscribe", {}), None)
             except NotRunning:
@@ -287,10 +307,16 @@ class Vertex:
                             self._emit("notice", message.get("data"))
                 finally:
                     timer.cancel()
+                    if not silent.is_set() and self.state is None:
+                        failed = relay_failure(connection._proc)
                     connection.close()
                     self._following = None
-            problem = (f"Vertex didn't answer within {FIRST_REPLY:g} seconds; trying again."
-                       if silent.is_set() and not self._stopping.is_set() else "")
+            if self._stopping.is_set():
+                problem = ""
+            elif silent.is_set():
+                problem = f"Vertex didn't answer within {FIRST_REPLY:g} seconds; trying again."
+            else:
+                problem = failed
             if problem != self.problem:
                 self.problem = problem
                 if self.state is None:
