@@ -43,6 +43,7 @@ USER_AGENT = ("DiscordBot (https://github.com/StellarGalaxyAtlas/"
               "vertex-private, 0.3)")
 
 HANDSHAKE, FRAME, CLOSE, PING, PONG = 0, 1, 2, 3, 4
+NOT_RUNNING_EXIT = 3          # the relay's exit status when it finds no Discord
 
 # What the keys need: voice settings and channels.
 SCOPES = ("rpc", "rpc.voice.read", "rpc.voice.write")
@@ -127,6 +128,25 @@ def in_flatpak() -> bool:
     return os.path.exists("/.flatpak-info")
 
 
+def relay_failure(proc: subprocess.Popen | None) -> str:
+    """Why a relay that ended without a word failed, or "" when it simply
+    found nothing to connect to (or there was no relay)."""
+    if proc is None:
+        return ""
+    try:
+        code = proc.wait(2)
+    except subprocess.TimeoutExpired:
+        return ""
+    if code in (0, NOT_RUNNING_EXIT):
+        return ""
+    try:
+        errors = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
+    except (OSError, ValueError):
+        errors = ""
+    last = errors.splitlines()[-1] if errors else ""
+    return f"The relay to the host failed ({code}){': ' + last if last else '.'}"
+
+
 class NotRunning(RuntimeError):
     def __init__(self, message: str = "Discord is not running."):
         super().__init__(message)
@@ -150,7 +170,7 @@ class _Pipe:
             try:
                 self._proc = subprocess.Popen(relay, stdin=subprocess.PIPE,
                                               stdout=subprocess.PIPE,
-                                              stderr=subprocess.DEVNULL)
+                                              stderr=subprocess.PIPE)
             except OSError as exc:
                 raise NotRunning() from exc
 
@@ -495,6 +515,7 @@ class Discord:
                 if self.state is None:     # gone before Discord said READY
                     self._problem("Discord closed the connection without saying why."
                                   if pipe._proc is None else
+                                  relay_failure(pipe._proc) or
                                   "The relay found no Discord on the host, or Discord "
                                   "closed the connection.")
                 return
