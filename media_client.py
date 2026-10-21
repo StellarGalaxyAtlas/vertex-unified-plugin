@@ -32,6 +32,11 @@ POLL = 1.0           # seconds between looks at the players
 RETRY = 5.0          # seconds before the watcher starts again after it stopped
 TIMEOUT = 5.0
 COMMANDS = ("PlayPause", "Play", "Pause", "Next", "Previous")
+# `flatpak-spawn --host` runs a command in the folder it is started from, so
+# that folder has to exist on the host too. StreamController's Flatpak runs
+# from /app/bin/StreamController, which doesn't: started from there, every
+# command fails at once. Commands are started from / instead.
+HOST_CWD = "/"
 
 # Run with `sh -c WATCH sh <seconds>`: prints "PLAYER <bus name>", then the
 # player's properties on one line, for every player, then "END"; and again.
@@ -193,7 +198,7 @@ class Media:
             done = subprocess.run(
                 [*self.host, "gdbus", "call", "--session", "--dest", bus, "--object-path",
                  OBJECT, "--method", f"{PLAYER}.{method}"],
-                capture_output=True, text=True, timeout=TIMEOUT)
+                cwd=HOST_CWD, capture_output=True, text=True, timeout=TIMEOUT)
         except (OSError, subprocess.TimeoutExpired) as exc:
             return {"ok": False, "message": str(exc)}
         return {"ok": done.returncode == 0,
@@ -276,7 +281,7 @@ class Media:
         runs; returns why it stopped, or "" when the plugin stops."""
         try:
             watcher = subprocess.Popen([*host, "sh", "-c", WATCH, "sh", str(self.poll)],
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       cwd=HOST_CWD, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        text=True)
         except OSError as exc:
             return f"Couldn't run {(host or ['sh'])[0]}: {exc.strerror}."

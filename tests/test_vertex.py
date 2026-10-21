@@ -207,6 +207,14 @@ def test_an_empty_folder_in_sight_goes_through_the_relay(plugin, vertex, tmp_pat
         client.stop()
 
 
+def test_the_relay_runs_from_StreamControllers_folder(plugin, vertex, tmp_path,
+                                                     flatpak_spawn):
+    client = plugin.vertex_client.Vertex(str(tmp_path / "hidden" / "control.sock"),
+                                         relay=flatpak_spawn)
+    client.relay = [*flatpak_spawn, "python3", "-c", plugin.vertex_client.RELAY, vertex.sock]
+    assert client.send("show") == {"ok": True, "message": "did show"}
+
+
 def test_a_dead_socket_in_sight_falls_back_to_the_relay(plugin, vertex, tmp_path):
     (tmp_path / "sandbox").mkdir()
     dead = tmp_path / "sandbox" / "control.sock"

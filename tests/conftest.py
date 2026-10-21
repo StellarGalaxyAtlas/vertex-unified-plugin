@@ -119,6 +119,28 @@ def _stub_streamcontroller(monkeypatch):
 
 
 @pytest.fixture
+def flatpak_spawn(tmp_path, monkeypatch):
+    """`flatpak-spawn --host` as it behaves in StreamController's Flatpak: the
+    plugin runs from a folder only the sandbox has (/app/bin/StreamController),
+    and the host fails any command started from there. Returns the prefix to
+    use in place of ["flatpak-spawn", "--host"]."""
+    sandbox_only = tmp_path / "app-bin-StreamController"
+    sandbox_only.mkdir()
+    spawn = tmp_path / "flatpak-spawn"
+    spawn.write_text(f"""#!/bin/sh
+if [ "$(pwd -P)" = "{sandbox_only.resolve()}" ]; then
+  echo "Failed to change to directory $(pwd -P) (No such file or directory)" >&2
+  exit 1
+fi
+shift
+exec "$@"
+""")
+    spawn.chmod(0o755)
+    monkeypatch.chdir(sandbox_only)
+    return [str(spawn), "--host"]
+
+
+@pytest.fixture
 def plugin(monkeypatch):
     _stub_streamcontroller(monkeypatch)
     for name in [n for n in sys.modules if n.startswith(PACKAGE + ".")]:

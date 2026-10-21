@@ -154,6 +154,20 @@ def test_without_the_host_it_looks_in_the_sandbox(plugin, bus):
         client.stop()
 
 
+def test_the_host_runs_from_StreamControllers_folder(plugin, bus, flatpak_spawn):
+    client = plugin.media_client.Media(host=flatpak_spawn, poll=0.05)
+    bus.set(SPOTIFY, _props())
+    client.start()
+    try:
+        assert wait(lambda: client.players())
+        assert client.host == flatpak_spawn            # on the host, not the sandbox
+        replies = []
+        client.command("Pause", callback=replies.append)
+        assert wait(lambda: replies) and replies[0]["ok"]
+    finally:
+        client.stop()
+
+
 def test_the_player_a_key_controls(plugin):
     client = plugin.media_client.Media(host=None)
     client._set_state({"players": [
