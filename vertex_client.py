@@ -26,6 +26,7 @@ from collections.abc import Callable
 TIMEOUT = 5.0
 RETRY = 3.0          # seconds between attempts to reach a Vertex that isn't running
 FIRST_REPLY = 10.0   # seconds to wait for Vertex's first answer before trying again
+CHECK = 10.0         # seconds between checks that the Vertex followed is still the one running
 # `flatpak-spawn --host` runs a command in the folder it is started from, so
 # that folder has to exist on the host too. StreamController's Flatpak runs
 # from /app/bin/StreamController, which doesn't: started from there, every
@@ -286,48 +287,88 @@ class Vertex:
         if connection is not None:
             connection.close()
 
+    def _pid(self):
+        """The running Vertex's process id; None if it doesn't say, and
+        NotRunning if there is none."""
+        reply = self.send("ping")
+        return reply.get("pid") if reply.get("ok") else None
+
+    def _check(self, connection: _Connection, done: threading.Event,
+               lost: threading.Event) -> None:
+        """Drop the connection if the Vertex it follows is gone, though the
+        connection didn't end: one that quit or was updated, while another
+        one may already be running."""
+        try:
+            first = self._pid()
+        except NotRunning:
+            first = None
+        while not done.wait(CHECK):
+            try:
+                now = self._pid()
+            except NotRunning:
+                gone = True
+            else:
+                gone = None not in (first, now) and now != first
+            if gone:
+                lost.set()
+                connection.close()
+                return
+
     def _follow(self) -> None:
         while not self._stopping.is_set():
-            silent = threading.Event()
-            failed = ""                   # why the relay failed, if it did
             try:
-                connection = self._connect(_request("subscribe", {}), None)
-            except NotRunning:
-                connection = None
-            if connection is not None:
-                self._following = connection
-                # A connection that stays silent is dropped and tried again,
-                # so one that hangs while the desktop starts doesn't keep
-                # the keys off until StreamController restarts.
-                timer = threading.Timer(FIRST_REPLY, _drop, (silent, connection))
-                timer.start()
-                try:
-                    for message in connection:
-                        timer.cancel()
-                        self.problem = ""
-                        # The first reply has no "event": it is the state too.
-                        if message.get("event", "state") == "state":
-                            self._set_state(message.get("data"))
-                        elif message["event"] == "notice":
-                            self._emit("notice", message.get("data"))
-                finally:
-                    timer.cancel()
-                    if not silent.is_set() and self.state is None:
-                        failed = relay_failure(connection._proc)
-                    connection.close()
-                    self._following = None
+                problem = self._follow_once()
+            except Exception as exc:      # never leave the keys without a connection
+                problem = f"Lost Vertex ({exc}); trying again."
             if self._stopping.is_set():
                 problem = ""
-            elif silent.is_set():
-                problem = f"Vertex didn't answer within {FIRST_REPLY:g} seconds; trying again."
-            else:
-                problem = failed
             if problem != self.problem:
                 self.problem = problem
                 if self.state is None:
                     self._emit("state", None)    # the same state, but another problem
             self._set_state(None)
             self._stopping.wait(RETRY)
+
+    def _follow_once(self) -> str:
+        """Follow Vertex over one connection, until it ends. Returns why it
+        ended, if that's worth saying."""
+        try:
+            connection = self._connect(_request("subscribe", {}), None)
+        except NotRunning:
+            return ""
+        self._following = connection
+        silent, done, lost = threading.Event(), threading.Event(), threading.Event()
+        # A connection that stays silent is dropped and tried again, so one
+        # that hangs while the desktop starts doesn't keep the keys off until
+        # StreamController restarts.
+        timer = threading.Timer(FIRST_REPLY, _drop, (silent, connection))
+        timer.start()
+        failed, answered = "", False
+        try:
+            for message in connection:
+                if not answered:
+                    answered = True
+                    timer.cancel()
+                    threading.Thread(target=self._check, args=(connection, done, lost),
+                                     daemon=True, name="vertex-check").start()
+                self.problem = ""
+                # The first reply has no "event": it is the state too.
+                if message.get("event", "state") == "state":
+                    self._set_state(message.get("data"))
+                elif message.get("event") == "notice":
+                    self._emit("notice", message.get("data"))
+        finally:
+            timer.cancel()
+            done.set()
+            if not silent.is_set() and self.state is None:
+                failed = relay_failure(connection._proc)
+            connection.close()
+            self._following = None
+        if silent.is_set():
+            return f"Vertex didn't answer within {FIRST_REPLY:g} seconds; trying again."
+        if lost.is_set():
+            return "The Vertex that was followed is gone; connecting again."
+        return failed
 
 
 # --- Reading the state --------------------------------------------------------------

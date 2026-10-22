@@ -146,6 +146,75 @@ def test_a_vertex_that_stays_silent_is_tried_again(plugin, tmp_path, monkeypatch
     del listener
 
 
+@pytest.mark.parametrize("relay", [None, []])
+def test_a_new_vertex_is_found_though_the_old_connection_stays_open(plugin, tmp_path,
+                                                                     monkeypatch, relay):
+    # The Vertex followed goes away (quit, or updated) but its connection
+    # never ends; a new Vertex starts at the same socket.
+    monkeypatch.setattr(plugin.vertex_client, "CHECK", 0.2)
+    monkeypatch.setattr(plugin.vertex_client, "RETRY", 0.1)
+    path = str(tmp_path / "control.sock")
+    old = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    old.bind(path)
+    old.listen()
+    conns, pings = [], []
+
+    def accept():
+        while True:
+            try:
+                conn, _ = old.accept()
+            except OSError:
+                return
+            conns.append(conn)
+            request = json.loads(conn.makefile("rb").readline())
+            pings.append(request["command"] == "ping")
+            reply = {"ok": True, "message": "pong", "pid": 1} \
+                if request["command"] == "ping" else {"ok": True, "data": _state()}
+            conn.sendall(json.dumps(reply).encode() + b"\n")
+    threading.Thread(target=accept, daemon=True).start()
+    client = plugin.vertex_client.Vertex(path, relay=relay)
+    client.prefer_socket = False
+    problems = []
+    client.add_listener(listener := lambda event, data: problems.append(client.problem))
+    client.start()
+    new = None
+    try:
+        assert _wait(lambda: client.state == _state() and any(pings))
+        old.close()
+        Path(path).unlink()
+        new = ipc.ControlServer(lambda command, args: {"ok": True, "data": _state(volume=7)},
+                                path, subscribers=ipc.Subscribers())
+        assert new.start()
+        assert _wait(lambda: client.state == _state(volume=7)), (problems, client.state)
+        assert any("gone" in problem for problem in problems)
+    finally:
+        client.stop()
+        if new is not None:
+            new.stop()
+        for conn in conns:
+            conn.close()
+    del listener
+
+
+def test_following_survives_an_error(plugin, vertex, monkeypatch):
+    monkeypatch.setattr(plugin.vertex_client, "RETRY", 0.1)
+    parse = plugin.vertex_client._parse
+    calls = []
+
+    def broken_once(line):
+        calls.append(line)
+        if len(calls) == 1:
+            raise RuntimeError("unexpected")
+        return parse(line)
+    monkeypatch.setattr(plugin.vertex_client, "_parse", broken_once)
+    client = plugin.vertex_client.Vertex(vertex.sock, relay=None)
+    client.start()
+    try:
+        assert _wait(lambda: client.state == _state())
+    finally:
+        client.stop()
+
+
 def test_a_relay_that_hangs_is_dropped(plugin, tmp_path, monkeypatch):
     monkeypatch.setattr(plugin.vertex_client, "FIRST_REPLY", 0.3)
     monkeypatch.setattr(plugin.vertex_client, "RETRY", 0.1)
