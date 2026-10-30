@@ -158,6 +158,19 @@ flatpak override --user --filesystem=xdg-run/discord-ipc-0 --talk-name=org.mpris
 For the Flatpak Discord, use `xdg-run/app/com.discordapp.Discord` instead of
 `xdg-run/discord-ipc-0`.
 
+## Uninstall
+
+```fish
+rm ~/.var/app/com.core447.StreamController/data/plugins/com_stellargalaxyatlas_Vertex
+rm -rf ~/vertex-media
+```
+
+Restart StreamController and remove the plugin's keys from your deck. To
+undo the Flatpak permissions, run
+`flatpak override --user --reset com.core447.StreamController` (this resets
+every override you gave StreamController). You can delete your Discord app in
+the [Developer Portal](https://discord.com/developers/applications).
+
 ## Development
 
 See [development.md](development.md).
